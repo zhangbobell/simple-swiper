@@ -207,9 +207,12 @@
         // 消除 FRR 的影响
         this.offset[this.axis] = this.offset[this.axis] - this.moveDirection * this.fingerRecognitionRange;
 
+
+        var directionKey = this.getDirectionKey(this.moveDirection);
+
         // 如果允许滑动并且 activePage 不为空
         if (this.activePage !== EMPTY_PAGE
-        && (this.transition.direction === undefined || this.transition.direction === this.moveDirection)) {
+        && (this.transition.direction === DIRECTION.nonward || this.transition.direction === this.moveDirection)) {
             this.pageChange = true;
 
             this.render();
@@ -219,14 +222,18 @@
                 backward: this.sideLength - 20
             };
 
-            if (this.moveDirection === DIRECTION.forward && this.end[this.axis] < GAP.forward) {
-                this.log('<--- near edge');
-                this.endHandler();
-                
+            if (this.moveDirection * this.end[this.axis] > this.moveDirection * GAP[directionKey]) {
+                var logStr = this.moveDirection === Direction.forward ? '<--- near edge' : 'near edge --->';
+                this.log(logStr);
+                return this.endHandler();
             }
-            else if (this.moveDirection === DIRECTION.backward && this.end[this.axis] > GAP.backward) {
-                this.log('near edge --->');
-                this.endHandler();
+        }
+    }
+
+    Swiper.prototype.getDirectionKey = function (direction) {
+        for (var key in DIRECTION) {
+            if (DIRECTION.hasOwnProperty(key) && DIRECTION[key] === direction) {
+                return key;
             }
         }
     }
@@ -289,46 +296,41 @@
         var startTick = null;
         var startOffset = this.offset[this.axis];
         var velocity = this.sideLength / this.transition.duration;
-        var TOLERANCE = 1000 / 60 * velocity;
 
-        // 回弹的情形        
-        function unSwipeStep(timestamp) {
+        var boundary = {
+            forward: {
+                unSwipe: 0,
+                swipe: -this.sideLength
+            },
+            backward: {
+                unSwipe: 0,
+                swipe: this.sideLength
+            },
+            nonward: 0
+        };
+
+        var type = this.pageChange ? 'swipe' : 'unSwipe';
+        var directionKey = this.getDirectionKey(this.moveDirection);
+        var b = boundary[directionKey][type] || 0;
+
+        function step(timestamp) {
             if (startTick === null) {
                 startTick = timestamp;
             }
 
             this.offset[this.axis] = startOffset + (timestamp - startTick) * this.moveDirection * velocity;
-            if (this.moveDirection * this.offset[this.axis] < 0) {
-
+            if (this.moveDirection * this.offset[this.axis] < this.moveDirection * b) {
                 this.render();
-                requestAnimationFrame(arguments.callee.bind(this));
+                requestAnimationFrame(step.bind(this));
             }
             else {
                 // the last frame
-                this.offset[this.axis] = 0;
+                this.offset[this.axis] = b;
                 this.render();
             }
         }
 
-        function swipeStep(timestamp) {
-            if (startTick === null) {
-                startTick = timestamp;
-            }
-
-            this.offset[this.axis] = startOffset + (timestamp - startTick) * this.moveDirection * velocity;
-            if (this.moveDirection * this.offset[this.axis] < this.sideLength) {
-                
-                this.render();
-                requestAnimationFrame(arguments.callee.bind(this));
-            }
-            else {
-                // the last frame
-                this.offset[this.axis] = this.moveDirection * this.sideLength;
-                this.render();
-            }
-        }
-
-        requestAnimationFrame(this.pageChange ? swipeStep.bind(this) : unSwipeStep.bind(this));
+        requestAnimationFrame(step.bind(this));
     }
 
     Swiper.prototype.swipeTo = function (toIndex, transition) {
