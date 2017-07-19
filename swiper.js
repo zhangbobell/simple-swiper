@@ -53,17 +53,7 @@
             }
         }
 
-        this.listeners = {};
-        Swiper.EVENTS.forEach(function (eventName) {
-            var capitalized = eventName.replace(/^\w{1}/, function (m) {
-                return m.toUpperCase();
-            });
-            var fn = options['on' + capitalized];
-            
-            typeof fn === 'function' && this.on(eventName, fn);
-        }.bind(this)); 
-
-
+        this._listeners = {};
 
         // 页面在动
         this.sliding = false;
@@ -369,19 +359,22 @@
     }
 
     Swiper.prototype.on = function (eventName, callback) {
-        if (!this.listeners[eventName]) {
-            this.listeners[eventName] = [];
-        }
+        var eventNames = eventName.split(' ');
+        eventNames.forEach(function (eventName) {
+            if (!this._listeners[eventName]) {
+                this._listeners[eventName] = [];
+            }
 
-        this.listeners[eventName].push(callback);
+            this._listeners[eventName].push(callback);
+        }.bind(this));
         return this;
     };
 
     Swiper.prototype.off = function (eventName, callback) {
-        if (this.listeners[eventName]) {
-            var index = this.listeners[eventName].indexOf(callback);
+        if (this._listeners[eventName]) {
+            var index = this._listeners[eventName].indexOf(callback);
             if (index > -1) {
-                this.listeners[eventName].splice(index, 1);
+                this._listeners[eventName].splice(index, 1);
             }
         }
 
@@ -389,9 +382,9 @@
     };
 
     Swiper.prototype.fire = function (eventName) {
-        if (this.listeners[eventName]) {
+        if (this._listeners[eventName]) {
             var args = Array.prototype.slice.call(arguments, 1);
-            this.listeners[eventName].forEach(function (callback) {
+            this._listeners[eventName].forEach(function (callback) {
                 callback.apply(this, args);
             }.bind(this));
         }
