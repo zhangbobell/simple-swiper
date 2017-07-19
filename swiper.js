@@ -1,15 +1,5 @@
 (function (global) {
 
-    var hasTouch = !!(('ontouchstart' in global && !/Mac OS X /.test(global.navigator.userAgent)) || global.DocumentTouch && document instanceof global.DocumentTouch);
-    var DEVICE = {
-        hasTouch: hasTouch,
-        startEvent: hasTouch ? 'touchstart' : 'mousedown',
-        moveEvent: hasTouch ? 'touchmove' : 'mousemove',
-        endEvent: hasTouch ? 'touchend' : 'mouseup',
-        cancelEvent: hasTouch ? 'touchcancel' : 'mouseout',
-        resizeEvent: 'onorientationchange' in global ? 'orientationchange' : 'resize'
-    };
-
     /**
      * 页面滑动方向
      * @const
@@ -125,23 +115,24 @@
     }
 
     Swiper.prototype.handleEvent = function (event) {
-        switch (event.type) {
+        var deviceEvent = DEVICE.getDeviceEvent(event);
+
+        switch (deviceEvent.type) {
             case 'mousedown':
-                if (event.button !== 0) {
+                if (deviceEvent.button !== 0) {
                     break;
                 }
             case 'touchstart':
-                this.keepDefaultHandler(event);
-                this.startHandler(event);
+                this.keepDefaultHandler(deviceEvent);
+                this.startHandler(deviceEvent.position);
                 break;
             case DEVICE.moveEvent:
-                this.keepDefaultHandler(event);
-                this.moveHandler(event);
+                this.keepDefaultHandler(deviceEvent);
+                this.moveHandler(deviceEvent.position);
                 break;
             case DEVICE.endEvent:
             case DEVICE.cancelEvent:
-                // mouseout, touchcancel event, trigger endEvent
-                this.endHandler(event);
+                this.endHandler();
                 break;
             case DEVICE.resizeEvent:
                 this.resizeHandler();
@@ -166,7 +157,7 @@
         event.preventDefault();
     };
 
-    Swiper.prototype.startHandler = function (event){
+    Swiper.prototype.startHandler = function (position){
     	if(this.sliding){
     		return;
     	}
@@ -176,9 +167,7 @@
         this.log('start');
     
         this.startTime = new Date().getTime();
-
-        this.start.X = DEVICE.hasTouch ? event.targetTouches[0].pageX : event.pageX;
-        this.start.Y = DEVICE.hasTouch ? event.targetTouches[0].pageY : event.pageY;
+        this.start = position;
 
         // 设置翻页动画
         this.transition = this.currentPage.transition || this.transition;
@@ -186,15 +175,14 @@
         this.fire('swipeBeforeStart');
     }
 
-    Swiper.prototype.moveHandler = function (event) {        
+    Swiper.prototype.moveHandler = function (position) {        
         if(this.sliding || !this.moving){
     		return;
     	}
 
         this.log('moving');
 
-        this.end.X = DEVICE.hasTouch ? event.targetTouches[0].pageX : event.pageX;
-        this.end.Y = DEVICE.hasTouch ? event.targetTouches[0].pageY : event.pageY;
+        this.end = position;
 
         this.offset = {
             X: this.end.X - this.start.X,
