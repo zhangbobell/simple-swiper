@@ -1,18 +1,32 @@
-(function (global) {
-    var hasTouch = !!(('ontouchstart' in global && !/Mac OS X /.test(global.navigator.userAgent)) || global.DocumentTouch && document instanceof global.DocumentTouch);
-    global.DEVICE = {
-        hasTouch: hasTouch,
-        startEvent: hasTouch ? 'touchstart' : 'mousedown',
-        moveEvent: hasTouch ? 'touchmove' : 'mousemove',
-        endEvent: hasTouch ? 'touchend' : 'mouseup',
-        cancelEvent: hasTouch ? 'touchcancel' : 'mouseout',
-        resizeEvent: 'onorientationchange' in global ? 'orientationchange' : 'resize',
-        getDeviceEvent: getDeviceEvent
-    };
+/**
+ * @file device.js: 处理与 swiper 所在设备有关的行为
+ *
+ * @note:
+ * 这样做的好处：
+ * 1. 为 swiper 提供透明的环境
+ * 2. 模块解耦，方便单元测试
+ *
+ * @author zhangbobell
+ *
+ * @email：zhangbo21@baidu.com
+ * @created: 2017.07.18
+ */
 
-    function getDeviceEvent(event) {
-        var position = this.hasTouch ? _getTouchPosition(event) : _getMousePosition(event);
-        
+ var Device = (function () {
+
+    function Device(global) {
+        this.hasTouch = !!(('ontouchstart' in global && !/Mac OS X /.test(global.navigator.userAgent))
+            || (global.DocumentTouch && global.document instanceof global.DocumentTouch));
+        this.startEvent = this.hasTouch ? 'touchstart' : 'mousedown';
+        this.moveEvent = this.hasTouch ? 'touchmove' : 'mousemove';
+        this.endEvent = this.hasTouch ? 'touchend' : 'mouseup';
+        this.cancelEvent = this.hasTouch ? 'touchcancel' : 'mouseout';
+        // orientationchange also trigger resize
+        this.resizeEvent = 'resize';
+    }
+
+    Device.prototype.getDeviceEvent = function (event) {
+        var position = this.hasTouch ? this.getTouchPosition(event) : this.getMousePosition(event);
         return {
             type: event.type,
             position: position,
@@ -20,40 +34,47 @@
             button: event.button,
             preventDefault: event.preventDefault.bind(event)
         };
-    }
+    };
 
-    function _getTouchPosition(event) {
+    Device.prototype.getTouchPosition = function (event) {
         if (event.targetTouches && event.targetTouches.length > 0) {
             return {
                 X: event.targetTouches[0].pageX,
                 Y: event.targetTouches[0].pageY,
-            }
+            };
         }
-
         return {
             X: undefined,
             Y: undefined
-        }
-    }
+        };
+    };
 
-    function _getMousePosition(event) {
+    Device.prototype.getMousePosition = function (event) {
         if ('pageX' in event) {
             return {
                 X: event.pageX,
                 Y: event.pageY
-            }
+            };
         }
-
         return {
             X: undefined,
             Y: undefined
-        }
-    }
-})(window);
+        };
+    };
 
+    return Device;
+ }());
 
-(function (global) {
+/**
+ * @file swiper.js: swiper 的主文件
+ *
+ * @author zhangbobell
+ *
+ * @email：zhangbo21@baidu.com
+ * @created: 2017.07.18
+ */
 
+var Swiper = (function () {
     /**
      * 页面滑动方向
      * @const
@@ -63,7 +84,7 @@
         forward: -1,
         backward: 1,
         nonward: 0
-    }
+    };
 
     /**
      * 坐标轴正交方向
@@ -73,7 +94,7 @@
     var OPPSITE = {
         X: 'Y',
         Y: 'X'
-    }
+    };
 
     /**
      * 空页面
@@ -83,7 +104,7 @@
     var EMPTY_PAGE = document.createElement('div');
 
     var EMPTY_FUNCTION = function () {};
-
+    var ORIGIN_POINT = {X: 0, Y: 0};
 
     function Swiper(options) {
         this.$container = options.container;
@@ -92,17 +113,19 @@
         this.axis = options.vertical ? 'Y' : 'X';
         this.initIndex = options.initIndex || 0;
         this.loop = options.loop || false;
-        this.fingerRecognitionRange = options.fingerRecognitionRange > -1 ? parseInt(options.fingerRecognitionRange) : 10;
+        this.frr = options.frr > -1 ? parseInt(options.frr, 10) : 10;
         this.sideLength = this.axis === 'X' ? this.$container.clientWidth : this.$container.clientHeight;
         this.keepDefaultClasses = options.keepDefaultClasses || [];
-        
+
         this.transition = {
             duration: 800
         };
 
-        if(options.transition){
-            for(var k in options.transition){
-                this.transition[k] = options.transition[k];
+        if (options.transition) {
+            for (var k in options.transition) {
+                if (options.transition.hasOwnProperty(k)) {
+                    this.transition[k] = options.transition[k];
+                }
             }
         }
 
@@ -112,9 +135,9 @@
         this.sliding = false;
         // 手指在动
         this.moving = false;
-        this.start = {X: 0, Y: 0};
-        this.end = {X: 0, Y: 0};
-        this.offset = {X: 0, Y: 0};
+        this.start = ORIGIN_POINT;
+        this.end = ORIGIN_POINT;
+        this.offset = ORIGIN_POINT;
 
         // 是否换页
         this.pageChange = false;
@@ -127,80 +150,90 @@
         this.initRender();
     }
 
+    /**
+     * getDirectionKey: 由 DIRECTION 的 value(1, -1) 获取 key(backward, forward)
+     *
+     * @param {number} direction: DIERECTION 的值
+     *
+     * @return {string} key: DIRECTION 的键名
+     */
     Swiper.prototype.getDirectionKey = function (direction) {
         for (var key in DIRECTION) {
             if (DIRECTION.hasOwnProperty(key) && DIRECTION[key] === direction) {
                 return key;
             }
+
         }
-    }
+    };
 
     Swiper.prototype.bindEvents = function () {
-		this.$container.addEventListener(DEVICE.startEvent, this);
-		this.$container.addEventListener(DEVICE.moveEvent, this);
-		global.addEventListener(DEVICE.endEvent, this);
-        global.addEventListener(DEVICE.resizeEvent, this, false);
-    }
+        this.$container.addEventListener(Swiper.Device.startEvent, this);
+        this.$container.addEventListener(Swiper.Device.moveEvent, this);
+        window.addEventListener(Swiper.Device.endEvent, this);
+        window.addEventListener(Swiper.Device.resizeEvent, this, false);
+    };
 
     Swiper.prototype.unbindEvents = function () {
-        this.$container.removeEventListener(DEVICE.startEvent, this);
-		this.$container.removeEventListener(DEVICE.moveEvent, this);
-		global.removeEventListener(DEVICE.endEvent, this);
-        global.removeEventListener(DEVICE.resizeEvent, this, false);
-    }
+        this.$container.removeEventListener(Swiper.Device.startEvent, this);
+        this.$container.removeEventListener(Swiper.Device.moveEvent, this);
+        window.removeEventListener(Swiper.Device.endEvent, this);
+        window.removeEventListener(Swiper.Device.resizeEvent, this, false);
+    };
 
     Swiper.prototype.handleEvent = function (event) {
-        var deviceEvent = DEVICE.getDeviceEvent(event);
+        var deviceEvent = Swiper.Device.getDeviceEvent(event);
 
         switch (deviceEvent.type) {
             case 'mousedown':
                 if (deviceEvent.button !== 0) {
                     break;
                 }
+
             case 'touchstart':
                 this.keepDefaultHandler(deviceEvent);
                 this.startHandler(deviceEvent.position);
                 break;
-            case DEVICE.moveEvent:
+            case Swiper.Device.moveEvent:
                 this.keepDefaultHandler(deviceEvent);
                 this.moveHandler(deviceEvent.position);
                 break;
-            case DEVICE.endEvent:
-            case DEVICE.cancelEvent:
+            case Swiper.Device.endEvent:
+            case Swiper.Device.cancelEvent:
                 this.endHandler();
                 break;
-            case DEVICE.resizeEvent:
+            case Swiper.Device.resizeEvent:
                 this.resizeHandler();
                 break;
             default:
                 break;
         }
-    }
+    };
 
     Swiper.prototype.keepDefaultHandler = function (event) {
         if (event.target && /^(input|textarea|a|select)$/i.test(event.target.tagName)) {
             return;
         }
-        
+
         var keepDefaultClasses = this.keepDefaultClasses;
         for (var i = 0; i < keepDefaultClasses.length; i++) {
             if (event.target.classList.contains(keepDefaultClasses[i])) {
                 return;
             }
+
         }
-        
+
         event.preventDefault();
     };
 
-    Swiper.prototype.startHandler = function (position){
-    	if(this.sliding){
-    		return;
-    	}
+    Swiper.prototype.startHandler = function (position) {
+        if (this.sliding) {
+            return;
+        }
 
         this.moving = true;
 
         this.log('start');
-    
+
         this.startTime = new Date().getTime();
         this.start = position;
 
@@ -208,12 +241,12 @@
         this.transition = this.currentPage.transition || this.transition;
 
         this.fire('swipeStart');
-    }
+    };
 
-    Swiper.prototype.moveHandler = function (position) {        
-        if(this.sliding || !this.moving){
-    		return;
-    	}
+    Swiper.prototype.moveHandler = function (position) {
+        if (this.sliding || !this.moving) {
+            return;
+        }
 
         this.log('moving');
 
@@ -225,7 +258,7 @@
         };
 
         // 小于 FRR 的不响应
-        if (Math.abs(this.offset[this.axis]) < this.fingerRecognitionRange) {
+        if (Math.abs(this.offset[this.axis]) < this.frr) {
             return;
         }
 
@@ -252,14 +285,13 @@
         }
 
         // 消除 FRR 的影响
-        this.offset[this.axis] = this.offset[this.axis] - this.moveDirection * this.fingerRecognitionRange;
-
+        this.offset[this.axis] = this.offset[this.axis] - this.moveDirection * this.frr;
 
         var directionKey = this.getDirectionKey(this.moveDirection);
 
         if (this.activePage === EMPTY_PAGE
-        || this.transition.direction === DIRECTION.nonward
-        || (this.transition.direction && this.transition.direction !== this.moveDirection)) {
+            || this.transition.direction === DIRECTION.nonward
+            || (this.transition.direction && this.transition.direction !== this.moveDirection)) {
             this.offset[this.axis] = 0;
         }
 
@@ -278,35 +310,31 @@
         this.pageChange = true;
 
         this.render();
-    }
+    };
 
     Swiper.prototype.endHandler = function () {
-        if(this.sliding || !this.moving){
-    		return;
-    	}
-        
+        if (this.sliding || !this.moving) {
+            return;
+        }
+
         this.moving = false;
         this.log('end');
 
         // 如果禁止滑动
         if (this.transition.direction === DIRECTION.nonward
-        || (this.transition.direction && this.transition.direction !== this.moveDirection)) {
+            || (this.transition.direction && this.transition.direction !== this.moveDirection)) {
             this.offset[this.axis] = 0;
         }
 
-        this.endTime = new Date().getTime();     
-        
+        this.endTime = new Date().getTime();
+
         var moveTime = this.endTime - this.startTime;
         var threshold = moveTime > 300 ? this.sideLength / 3 : 14;
-
-        var sideOffset = this.offset[this.axis];
-        // 是否在沿着axis滑动    
+        // 是否在沿着axis滑动
         var absOffset = Math.abs(this.offset[this.axis]);
         var absReverseOffset = Math.abs(this.offset[OPPSITE[this.axis]]);
         var isSwipeOnTheDir = absReverseOffset < absOffset;
 
-        var currentIndex = this.currentPage.index;
-        
         if (absOffset >= threshold && isSwipeOnTheDir) {
             this.pageChange = true;
             this._swipeTo();
@@ -317,13 +345,14 @@
             this._swipeTo();
             this.fire('swipeRestore');
         }
-    }
+    };
 
     Swiper.prototype.resizeHandler = function () {
         if (!this.sliding && !this.moving) {
             this.sideLength = this.axis === 'X' ? this.$container.clientWidth : this.$container.clientHeight;
         }
-    }
+
+    };
 
     Swiper.prototype._swipeTo = function () {
         if (this.sliding) {
@@ -375,13 +404,12 @@
         }
 
         requestAnimationFrame(step.bind(this));
-    }
+    };
 
     Swiper.prototype.swipeTo = function (toIndex, transition) {
         var currentIndex = this.currentPage.index;
         this.moveDirection = DIRECTION.nonward;
         this.pageChange = true;
-        
 
         if (toIndex > currentIndex) {
             this.moveDirection = DIRECTION.forward;
@@ -390,21 +418,20 @@
             this.moveDirection = DIRECTION.backward;
         }
 
-        this.offset[this.axis] = this.moveDirection;        
+        this.offset[this.axis] = this.moveDirection;
 
         var activeIndex = this.loop ? (toIndex + this.data.length) % this.data.length : toIndex;
-        this.activePage = this.$pages[activeIndex] || EMPTY_PAGE;        
-        
+        this.activePage = this.$pages[activeIndex] || EMPTY_PAGE;
 
         if (activeIndex === currentIndex || this.activePage === EMPTY_PAGE) {
             this.moveDirection = DIRECTION.nonward;
-            this.offset[this.axis] = 0;            
+            this.offset[this.axis] = 0;
             this.pageChange = false;
         }
 
         this.transition = transition || this.currentPage.transition || this.transition;
         this._swipeTo();
-    }
+    };
 
     Swiper.prototype.on = function (eventName, callback) {
         var eventNames = eventName.split(' ');
@@ -426,7 +453,7 @@
             }
         }
 
-        return this; 
+        return this;
     };
 
     Swiper.prototype.fire = function (eventName, event) {
@@ -441,14 +468,14 @@
         return this;
     };
 
-    Swiper.prototype.destroy = function() {
+    Swiper.prototype.destroy = function () {
         this.unbindEvents();
         this._listeners = {};
         this.$container.style.overflow = '';
         this.$swiper.parentElement.removeChild(this.$swiper);
 
         this.fire('destroy');
-    }
+    };
 
     Swiper.prototype.initRender = function () {
         this.$swiper = document.createElement('div');
@@ -457,18 +484,19 @@
             var $page = document.createElement('div');
             $page.classList.add('lg-swiper-page');
 
-            if(typeof page.content === 'string'){
+            if (typeof page.content === 'string') {
                 $page.innerHTML = page.content;
-            }else{
+            }
+            else {
                 $page.appendChild(page.content);
             }
 
-			$page.index = index;
-            $page.transition = page.transition
+            $page.index = index;
+            $page.transition = page.transition;
 
-			if (this.initIndex === index) {
-				$page.classList.add('current');
-				this.currentPage = $page;
+            if (this.initIndex === index) {
+                $page.classList.add('current');
+                this.currentPage = $page;
             }
 
             this.$swiper.appendChild($page);
@@ -483,10 +511,10 @@
             $page.prev = this.$pages[prevIndex] || EMPTY_PAGE;
             $page.next = this.$pages[nextIndex] || EMPTY_PAGE;
         }.bind(this));
-        
+
         this.$container.style.overflow = 'hidden';
-		this.$container.appendChild(this.$swiper);
-    }
+        this.$container.appendChild(this.$swiper);
+    };
 
     Swiper.prototype.render = function () {
         var axis = this.axis;
@@ -498,7 +526,7 @@
             this.lastActivePage.style.cssText = '';
 
             if (this.activePage !== EMPTY_PAGE) {
-                this.activePage.classList.add('active');            
+                this.activePage.classList.add('active');
             }
         }
 
@@ -509,13 +537,13 @@
             this.$swiper.style.cssText = '';
             this.currentPage.style.cssText = '';
             this.activePage.style.cssText = '';
-            
-            this.activePage.classList.remove('active')  
-            this.activePage = EMPTY_PAGE;    
+
+            this.activePage.classList.remove('active');
+            this.activePage = EMPTY_PAGE;
             this.lastActivePage = EMPTY_PAGE;
 
             this.sliding = false;
-            
+
             this.pageChange = false;
 
             return this.fire('swipeRestored');
@@ -526,12 +554,12 @@
             this.$swiper.style.cssText = '';
             this.currentPage.style.cssText = '';
             this.activePage.style.cssText = '';
-            
-            this.currentPage.classList.remove('current');            
-            this.activePage.classList.remove('active')            
+
+            this.currentPage.classList.remove('current');
+            this.activePage.classList.remove('active');
 
             this.activePage.classList.add('current');
-            
+
             this.currentPage = this.activePage;
             this.activePage = EMPTY_PAGE;
             this.lastActivePage = EMPTY_PAGE;
@@ -547,21 +575,21 @@
         }
 
         // 普通渲染：计算
-        let transform = this.slide({
+        var transform = this.slide({
             axis: axis,
             sideOffset: sideOffset,
             sideLength: this.sideLength
         });
 
-        this.currentPage.style.cssText = transform.currentPage;  
+        this.currentPage.style.cssText = transform.currentPage;
 
         // no one could add class or cssText to EMPTY_PAGE
         if (this.activePage !== EMPTY_PAGE) {
-            this.activePage.style.cssText = transform.activePage;                            
+            this.activePage.style.cssText = transform.activePage;
         }
-    }
 
-    
+    };
+
     Swiper.prototype.slide = function (swiper) {
         var axis = swiper.axis;
         var sideOffset = swiper.sideOffset;
@@ -569,10 +597,11 @@
         var sign = this.sign(sideOffset);
 
         return {
-            currentPage: `-webkit-transform: translateZ(0) translate${axis}(${sideOffset}px);`,
-            activePage: `-webkit-transform: translateZ(0) translate${axis}(${sideOffset - sign * sideLength}px);`
+            currentPage: '-webkit-transform: translateZ(0) translate' + axis + '(' + sideOffset + 'px);',
+            activePage: '-webkit-transform: translateZ(0) translate'
+                + axis + '(' + (sideOffset - sign * sideLength) + 'px);'
         };
-    }
+    };
 
     Swiper.prototype.sign = function (x) {
         x = +x;
@@ -582,9 +611,9 @@
         }
 
         return x > 0 ? 1 : -1;
-    }
+    };
 
+    return Swiper;
+}());
 
-    global.Swiper = Swiper;
-})(window || this);
-
+Swiper.Device = new Device(window);

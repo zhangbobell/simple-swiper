@@ -1,18 +1,32 @@
-(function (global) {
-    var hasTouch = !!(('ontouchstart' in global && !/Mac OS X /.test(global.navigator.userAgent)) || global.DocumentTouch && document instanceof global.DocumentTouch);
-    global.DEVICE = {
-        hasTouch: hasTouch,
-        startEvent: hasTouch ? 'touchstart' : 'mousedown',
-        moveEvent: hasTouch ? 'touchmove' : 'mousemove',
-        endEvent: hasTouch ? 'touchend' : 'mouseup',
-        cancelEvent: hasTouch ? 'touchcancel' : 'mouseout',
-        resizeEvent: 'onorientationchange' in global ? 'orientationchange' : 'resize',
-        getDeviceEvent: getDeviceEvent
-    };
+/**
+ * @file device.js: 处理与 swiper 所在设备有关的行为
+ *
+ * @note:
+ * 这样做的好处：
+ * 1. 为 swiper 提供透明的环境
+ * 2. 模块解耦，方便单元测试
+ *
+ * @author zhangbobell
+ *
+ * @email：zhangbo21@baidu.com
+ * @created: 2017.07.18
+ */
 
-    function getDeviceEvent(event) {
-        var position = this.hasTouch ? _getTouchPosition(event) : _getMousePosition(event);
-        
+ var Device = (function () {
+
+    function Device(global) {
+        this.hasTouch = !!(('ontouchstart' in global && !/Mac OS X /.test(global.navigator.userAgent))
+            || (global.DocumentTouch && global.document instanceof global.DocumentTouch));
+        this.startEvent = this.hasTouch ? 'touchstart' : 'mousedown';
+        this.moveEvent = this.hasTouch ? 'touchmove' : 'mousemove';
+        this.endEvent = this.hasTouch ? 'touchend' : 'mouseup';
+        this.cancelEvent = this.hasTouch ? 'touchcancel' : 'mouseout';
+        // orientationchange also trigger resize
+        this.resizeEvent = 'resize';
+    }
+
+    Device.prototype.getDeviceEvent = function (event) {
+        var position = this.hasTouch ? this.getTouchPosition(event) : this.getMousePosition(event);
         return {
             type: event.type,
             position: position,
@@ -20,34 +34,33 @@
             button: event.button,
             preventDefault: event.preventDefault.bind(event)
         };
-    }
+    };
 
-    function _getTouchPosition(event) {
+    Device.prototype.getTouchPosition = function (event) {
         if (event.targetTouches && event.targetTouches.length > 0) {
             return {
                 X: event.targetTouches[0].pageX,
                 Y: event.targetTouches[0].pageY,
-            }
+            };
         }
-
         return {
             X: undefined,
             Y: undefined
-        }
-    }
+        };
+    };
 
-    function _getMousePosition(event) {
+    Device.prototype.getMousePosition = function (event) {
         if ('pageX' in event) {
             return {
                 X: event.pageX,
                 Y: event.pageY
-            }
+            };
         }
-
         return {
             X: undefined,
             Y: undefined
-        }
-    }
-})(window);
+        };
+    };
 
+    return Device;
+ }());
