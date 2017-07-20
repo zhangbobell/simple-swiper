@@ -3,7 +3,7 @@
 var gulp = require('gulp');
 var plugin = require('gulp-load-plugins')();
 var concat = require('gulp-concat');
-// var gulpCopy = require('gulp-copy');
+var gulpCopy = require('gulp-copy');
 // var htmlreplace = require('gulp-html-replace');
 var runSequence = require('run-sequence');
 
@@ -49,12 +49,20 @@ gulp.task('concat', function () {
         .pipe(gulp.dest('./dist'));
 });
 
-// gulp.task('copy', function () {
-//     return gulp.src([
-//             './index.html',
-//         ])
-//         .pipe(gulpCopy('./dist'));
-// });
+gulp.task('copy', function () {
+    return gulp.src([
+            './src/swiper.css',
+        ])
+        .pipe(gulpCopy('./dist', {prefix: 1}));
+});
+
+gulp.task('watch', function () {
+    return gulp.watch([
+        'src/**/*.js',
+        'src/**/*.css'
+    ], ['default']);
+})
+
 
 // gulp.task('replace', function() {
 //     return gulp.src('./dist/index.html')
@@ -75,6 +83,6 @@ gulp.task('concat', function () {
 // });
 
 
-gulp.task('default', function(){
-    return runSequence('clean', 'css', 'concat', 'js');
+gulp.task('default', function () {
+    return runSequence('clean', 'copy', 'css', 'concat', 'js');
 });
