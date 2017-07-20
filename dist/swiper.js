@@ -1,4 +1,58 @@
 (function (global) {
+    var hasTouch = !!(('ontouchstart' in global && !/Mac OS X /.test(global.navigator.userAgent)) || global.DocumentTouch && document instanceof global.DocumentTouch);
+    global.DEVICE = {
+        hasTouch: hasTouch,
+        startEvent: hasTouch ? 'touchstart' : 'mousedown',
+        moveEvent: hasTouch ? 'touchmove' : 'mousemove',
+        endEvent: hasTouch ? 'touchend' : 'mouseup',
+        cancelEvent: hasTouch ? 'touchcancel' : 'mouseout',
+        resizeEvent: 'onorientationchange' in global ? 'orientationchange' : 'resize',
+        getDeviceEvent: getDeviceEvent
+    };
+
+    function getDeviceEvent(event) {
+        var position = this.hasTouch ? _getTouchPosition(event) : _getMousePosition(event);
+        
+        return {
+            type: event.type,
+            position: position,
+            target: event.target,
+            button: event.button,
+            preventDefault: event.preventDefault.bind(event)
+        };
+    }
+
+    function _getTouchPosition(event) {
+        if (event.targetTouches && event.targetTouches.length > 0) {
+            return {
+                X: event.targetTouches[0].pageX,
+                Y: event.targetTouches[0].pageY,
+            }
+        }
+
+        return {
+            X: undefined,
+            Y: undefined
+        }
+    }
+
+    function _getMousePosition(event) {
+        if ('pageX' in event) {
+            return {
+                X: event.pageX,
+                Y: event.pageY
+            }
+        }
+
+        return {
+            X: undefined,
+            Y: undefined
+        }
+    }
+})(window);
+
+
+(function (global) {
 
     /**
      * 页面滑动方向
@@ -43,7 +97,6 @@
         this.keepDefaultClasses = options.keepDefaultClasses || [];
         
         this.transition = {
-            type: 'slide',
             duration: 800
         };
 
@@ -68,27 +121,19 @@
         this.moveDirection = DIRECTION.nonward;
         this.activePage = EMPTY_PAGE;
         this.lastActivePage = EMPTY_PAGE;
+        this.log = this.debug ? console.log.bind(window.console) : EMPTY_FUNCTION;
 
         this.bindEvents();
         this.initRender();
     }
 
-    Swiper.EVENTS = [
-        'initialize',
-        'initialized',
-        'renderComplete',
-        'swipeBeforeStart',
-        'swipeStart',
-        'swipeChange',
-        'swipeChanged',
-        'swipeRestore',
-        'swipeRestored',
-        // 'reset',
-        'destroy'
-    ];
-    
-    Swiper.prototype.log = this.debug ? console.log.bind(window.console) : EMPTY_FUNCTION;
-
+    Swiper.prototype.getDirectionKey = function (direction) {
+        for (var key in DIRECTION) {
+            if (DIRECTION.hasOwnProperty(key) && DIRECTION[key] === direction) {
+                return key;
+            }
+        }
+    }
 
     Swiper.prototype.bindEvents = function () {
 		this.$container.addEventListener(DEVICE.startEvent, this);
@@ -162,7 +207,7 @@
         // 设置翻页动画
         this.transition = this.currentPage.transition || this.transition;
 
-        this.fire('swipeBeforeStart');
+        this.fire('swipeStart');
     }
 
     Swiper.prototype.moveHandler = function (position) {        
@@ -200,6 +245,8 @@
             this.activePage = EMPTY_PAGE;
         }
 
+        this.fire('swipeMoving');
+
         if (this.activePage !== this.lastActivePage && this.activePage !== EMPTY_PAGE) {
             this.fire('activePageChanged');
         }
@@ -210,32 +257,27 @@
 
         var directionKey = this.getDirectionKey(this.moveDirection);
 
-        // 如果允许滑动并且 activePage 不为空
-        if (this.activePage !== EMPTY_PAGE
-        && (this.transition.direction === DIRECTION.nonward || this.transition.direction === this.moveDirection)) {
-            this.pageChange = true;
-
-            this.render();
-
-            var GAP = {
-                forward: 20,
-                backward: this.sideLength - 20
-            };
-
-            if (this.moveDirection * this.end[this.axis] > this.moveDirection * GAP[directionKey]) {
-                var logStr = this.moveDirection === Direction.forward ? '<--- near edge' : 'near edge --->';
-                this.log(logStr);
-                return this.endHandler();
-            }
+        if (this.activePage === EMPTY_PAGE
+        || this.transition.direction === DIRECTION.nonward
+        || (this.transition.direction && this.transition.direction !== this.moveDirection)) {
+            this.offset[this.axis] = 0;
         }
-    }
 
-    Swiper.prototype.getDirectionKey = function (direction) {
-        for (var key in DIRECTION) {
-            if (DIRECTION.hasOwnProperty(key) && DIRECTION[key] === direction) {
-                return key;
-            }
+        var GAP = {
+            forward: 20,
+            backward: this.sideLength - 20
+        };
+
+        // 判断是否接近边缘
+        if (this.moveDirection * this.end[this.axis] > this.moveDirection * GAP[directionKey]) {
+            var logStr = this.moveDirection === DIRECTION.forward ? '<--- near edge' : 'near edge --->';
+            this.log(logStr);
+            return this.endHandler();
         }
+
+        this.pageChange = true;
+
+        this.render();
     }
 
     Swiper.prototype.endHandler = function () {
@@ -247,9 +289,9 @@
         this.log('end');
 
         // 如果禁止滑动
-        if ((this.transition.direction && this.transition.direction !== this.moveDirection)
-        || this.transition.direction === DIRECTION.nonward) {
-            return;
+        if (this.transition.direction === DIRECTION.nonward
+        || (this.transition.direction && this.transition.direction !== this.moveDirection)) {
+            this.offset[this.axis] = 0;
         }
 
         this.endTime = new Date().getTime();     
@@ -258,9 +300,10 @@
         var threshold = moveTime > 300 ? this.sideLength / 3 : 14;
 
         var sideOffset = this.offset[this.axis];
+        // 是否在沿着axis滑动    
         var absOffset = Math.abs(this.offset[this.axis]);
         var absReverseOffset = Math.abs(this.offset[OPPSITE[this.axis]]);
-        var isSwipeOnTheDir = absReverseOffset < absOffset; // 是否在沿着axis滑动
+        var isSwipeOnTheDir = absReverseOffset < absOffset;
 
         var currentIndex = this.currentPage.index;
         
@@ -276,13 +319,14 @@
         }
     }
 
+    Swiper.prototype.resizeHandler = function () {
+        if (!this.sliding && !this.moving) {
+            this.sideLength = this.axis === 'X' ? this.$container.clientWidth : this.$container.clientHeight;
+        }
+    }
+
     Swiper.prototype._swipeTo = function () {
         if (this.sliding) {
-            return;
-        }
-
-        // 如果 activePage 为空
-        if (this.activePage === EMPTY_PAGE) {
             return;
         }
 
@@ -346,17 +390,19 @@
             this.moveDirection = DIRECTION.backward;
         }
 
+        this.offset[this.axis] = this.moveDirection;        
+
         var activeIndex = this.loop ? (toIndex + this.data.length) % this.data.length : toIndex;
+        this.activePage = this.$pages[activeIndex] || EMPTY_PAGE;        
         
-        // if the same, do nothing
-        if (activeIndex === currentIndex) {
+
+        if (activeIndex === currentIndex || this.activePage === EMPTY_PAGE) {
+            this.moveDirection = DIRECTION.nonward;
+            this.offset[this.axis] = 0;            
             this.pageChange = false;
         }
 
-        this.activePage = this.$pages[activeIndex] || EMPTY_PAGE;
-        this.offset[this.axis] = this.moveDirection;
-        this.transition = transition || this.transition;
-
+        this.transition = transition || this.currentPage.transition || this.transition;
         this._swipeTo();
     }
 
@@ -383,72 +429,25 @@
         return this; 
     };
 
-    Swiper.prototype.fire = function (eventName) {
+    Swiper.prototype.fire = function (eventName, event) {
+        event = event || {};
         if (this._listeners[eventName]) {
-            var args = Array.prototype.slice.call(arguments, 1);
+            event.name = eventName;
             this._listeners[eventName].forEach(function (callback) {
-                callback.apply(this, args);
+                callback.call(this, event);
             }.bind(this));
         }
 
         return this;
     };
 
-    Swiper.prototype.render = function () {
-        var axis = this.axis;
-        var sideOffset = this.offset[axis];
-        var obsoleteActivePage = document.querySelector('.active');
+    Swiper.prototype.destroy = function() {
+        this.unbindEvents();
+        this._listeners = {};
+        this.$container.style.overflow = '';
+        this.$swiper.parentElement.removeChild(this.$swiper);
 
-        if (obsoleteActivePage) {
-            obsoleteActivePage.classList.remove('active');
-            obsoleteActivePage.style.cssText = '';                
-        }
-        
-        this.currentPage.style.cssText = '';
-        this.activePage.style.cssText = '';
-
-        this.log('offset : ' + sideOffset);
-        var activeTranslate = this.pageChange
-        ? sideOffset - this.moveDirection * this.sideLength
-        : sideOffset + this.moveDirection * this.sideLength;
-        
-        this.activePage.classList.add('active');
-        this.currentPage.style.webkitTransform = 'translateZ(0) translate' + axis + '(' + sideOffset + 'px)';
-        this.activePage.style.webkitTransform = 'translateZ(0) translate' + axis + '(' + activeTranslate + 'px)';
-
-        // 回弹
-        if (this.pageChange === false && sideOffset === 0) {
-            this.currentPage.style.cssText = '';
-            this.activePage.style.cssText = '';
-            
-            this.activePage.classList.remove('active')  
-            this.activePage = EMPTY_PAGE;
-
-            this.sliding = false;
-            
-            this.pageChange = false;
-        }
-
-        // 正常翻页
-        if (this.pageChange === true && sideOffset === this.moveDirection * this.sideLength) {
-            this.currentPage.style.cssText = '';
-            this.activePage.style.cssText = '';
-            
-            this.currentPage.classList.remove('current');            
-            this.activePage.classList.remove('active')            
-
-            this.activePage.classList.add('current');
-            
-            this.currentPage = this.activePage;
-            this.activePage = EMPTY_PAGE;
-
-            this.offset.X = 0;
-            this.offset.Y = 0;
-
-            this.sliding = false;
-
-            this.pageChange = false;
-        }
+        this.fire('destroy');
     }
 
     Swiper.prototype.initRender = function () {
@@ -488,6 +487,103 @@
         this.$container.style.overflow = 'hidden';
 		this.$container.appendChild(this.$swiper);
     }
+
+    Swiper.prototype.render = function () {
+        var axis = this.axis;
+        var sideOffset = this.offset[axis];
+
+        // 撤销旧样式
+        if (this.lastActivePage !== this.activePage) {
+            this.lastActivePage.classList.remove('active');
+            this.lastActivePage.style.cssText = '';
+
+            if (this.activePage !== EMPTY_PAGE) {
+                this.activePage.classList.add('active');            
+            }
+        }
+
+        this.log('offset : ' + sideOffset);
+
+        // 回弹
+        if (this.pageChange === false && sideOffset === 0) {
+            this.$swiper.style.cssText = '';
+            this.currentPage.style.cssText = '';
+            this.activePage.style.cssText = '';
+            
+            this.activePage.classList.remove('active')  
+            this.activePage = EMPTY_PAGE;    
+            this.lastActivePage = EMPTY_PAGE;
+
+            this.sliding = false;
+            
+            this.pageChange = false;
+
+            return this.fire('swipeRestored');
+        }
+
+        // 正常翻页
+        else if (this.pageChange === true && sideOffset === this.moveDirection * this.sideLength) {
+            this.$swiper.style.cssText = '';
+            this.currentPage.style.cssText = '';
+            this.activePage.style.cssText = '';
+            
+            this.currentPage.classList.remove('current');            
+            this.activePage.classList.remove('active')            
+
+            this.activePage.classList.add('current');
+            
+            this.currentPage = this.activePage;
+            this.activePage = EMPTY_PAGE;
+            this.lastActivePage = EMPTY_PAGE;
+
+            this.offset.X = 0;
+            this.offset.Y = 0;
+
+            this.sliding = false;
+
+            this.pageChange = false;
+
+            return this.fire('swipeChanged');
+        }
+
+        // 普通渲染：计算
+        let transform = this.slide({
+            axis: axis,
+            sideOffset: sideOffset,
+            sideLength: this.sideLength
+        });
+
+        this.currentPage.style.cssText = transform.currentPage;  
+
+        // no one could add class or cssText to EMPTY_PAGE
+        if (this.activePage !== EMPTY_PAGE) {
+            this.activePage.style.cssText = transform.activePage;                            
+        }
+    }
+
+    
+    Swiper.prototype.slide = function (swiper) {
+        var axis = swiper.axis;
+        var sideOffset = swiper.sideOffset;
+        var sideLength = swiper.sideLength;
+        var sign = this.sign(sideOffset);
+
+        return {
+            currentPage: `-webkit-transform: translateZ(0) translate${axis}(${sideOffset}px);`,
+            activePage: `-webkit-transform: translateZ(0) translate${axis}(${sideOffset - sign * sideLength}px);`
+        };
+    }
+
+    Swiper.prototype.sign = function (x) {
+        x = +x;
+
+        if (x === 0 || isNaN(x)) {
+            return 0;
+        }
+
+        return x > 0 ? 1 : -1;
+    }
+
 
     global.Swiper = Swiper;
 })(window || this);

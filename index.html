@@ -87,14 +87,12 @@ html, body{
 <script>
 
 var list = [];
-var types = ['slide', 'rotate', 'flip'];
 var colors = ['red', 'green', 'blue', 'orange', 'purple'];
 for (var i = 0; i < 5; i++){
     list.push({
         content: '<div data-active="true" class="ro" style="background-color:' + colors[i] + ';">' + i + '<div class="component"></div><a href="http://baidu.com" target="_blank">xxx</a><input /></div>',
 		transition: {
-			type: 'slide',
-			duration: 200
+			duration: 2000
 		}
     });
 }
@@ -108,37 +106,22 @@ var swiper = new Swiper({
 	initIndex: 0,
 	// 设定从该页面出去的效果
 	transition: {
-		type: 'slide',
-		duration: 400,
-		// direction: 1
-	},
-
-	onSwipeStart: function () {
-		console.log('onSwipeStart');
-	},
-	onSwipeChange: function () {
-		console.log('onSwipeChange');
-	},
-	onSwipeChanged: function () {
-		console.log('onSwipeChanged')
+		duration: 400
 	}
 });
+var events = [
+	'swipeStart',
+	'swipeMoving',
+	'swipeChanged',
+	'swipeRestore',
+	'swipeRestored',        
+	'activePageChanged',
+	'destroy'
+];
 
+swiper.on(events.join(' '), function (e) {
+	console.log(e.name);
+})
 
-swiper.on('swipeChange', function () {
-	console.log('swipeChange');
-});
-
-swiper.on('swipeChanged', function () {
-	console.log('swipeChanged');
-});
-
-swiper.on('swipeRestore', function () {
-	console.log('swipeRestore');
-});
-
-swiper.on('swipeRestored', function () {
-	console.log('swipeRestored');
-});	
 </script>
 </html>

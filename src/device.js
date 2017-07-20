@@ -49,5 +49,5 @@
             Y: undefined
         }
     }
-}(window));
+})(window);
 

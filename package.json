@@ -1,0 +1,36 @@
+{
+  "name": "simple-swiper",
+  "version": "1.0.0",
+  "description": "a simple swiper",
+  "main": "src/swiper.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhangbobell/simple-swiper.git"
+  },
+  "keywords": [
+    "h5",
+    "swiper"
+  ],
+  "author": "zhangbobell",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/zhangbobell/simple-swiper/issues"
+  },
+  "homepage": "https://github.com/zhangbobell/simple-swiper#readme",
+  "devDependencies": {
+    "gulp": "^3.9.1",
+    "gulp-clean": "^0.3.2",
+    "gulp-concat": "^2.6.1",
+    "gulp-cssmin": "^0.2.0",
+    "gulp-load-plugins": "^1.5.0",
+    "gulp-rename": "^1.2.2",
+    "gulp-uglify": "^3.0.0",
+    "run-sequence": "^2.0.0"
+  }
+}
